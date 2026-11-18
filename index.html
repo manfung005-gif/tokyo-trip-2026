@@ -243,6 +243,8 @@ section:first-child{margin-top:0}
 .ledger-cols{display:grid;grid-template-columns:300px 1fr;gap:16px;margin-top:16px;align-items:start}
 @media (max-width:820px){.ledger-cols{grid-template-columns:1fr}}
 .cat-card{padding:18px 18px 16px}
+.cat-view{margin:-4px 0 10px}
+.cat-sum{margin:0 0 12px;font-size:14px;font-variant-numeric:tabular-nums}
 .cat-row{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:center;margin-bottom:10px}
 .cat-row .ico{grid-row:span 2;width:32px;height:32px;border:var(--line);border-radius:11px;display:grid;place-items:center;background:var(--c)}
 .cat-row .ico svg{width:18px;height:18px}
@@ -577,6 +579,8 @@ footer svg{width:120px;height:auto;display:block;margin:0 auto 6px}
   <div class="ledger-cols">
     <div class="card cat-card">
       <h3>類別</h3>
+      <div class="seg cat-view" id="catView" role="group" aria-label="睇邊個嘅數"></div>
+      <p class="cat-sum" id="catSum"></p>
       <div id="catBars"></div>
       <div class="rate-row">
         <label for="rateInp">匯率：¥100 =</label>
@@ -1263,6 +1267,18 @@ document.getElementById('expForm').addEventListener('submit', async e => {
 });
 
 let expFilter = 'all', expDel = null;
+// 類別表：全部 / 共同（夾份）/ 東東自己 / yeeting 自己
+const CAT_VIEWS = [
+  {key:'all',  label:'全部', c:'var(--yellow)'},
+  {key:'half', label:'共同', c:'var(--green)'},
+  ...WHO.map(w => ({key:w, label:w, c:WHO_C[w]}))
+];
+let catView = LS.get('tokyo2026-catview', 'all');
+if (!CAT_VIEWS.some(v => v.key === catView)) catView = 'all';
+document.getElementById('catView').addEventListener('click', e => {
+  const b = e.target.closest('.filter'); if (!b) return;
+  catView = b.dataset.k; LS.set('tokyo2026-catview', catView); renderLedger();
+});
 const dayLabel = v => {
   if (v === 'pre') return '出發前';
   const i = DAYS.findIndex(d => d.date === v);
@@ -1292,7 +1308,12 @@ function renderLedger(){
     : `<div>${esc(diff > 0 ? other : bal)} 要俾 ${esc(diff > 0 ? bal : other)} <b style="font-weight:400;font-size:20px">${fmtJPY(Math.abs(diff))}</b><small>≈ ${fmtHKD(jpyToHKD(Math.abs(diff)))}（夾份嘅一人一半，自己嗰啲自己俾）</small></div>`;
   document.getElementById('settleBox').innerHTML = `<span class="ico">${ICONS.yen}</span>${settle}`;
   // 類別
-  const byCat = CATS.map(c => ({...c, v: list.filter(e => e.cat === c.key).reduce((n,e) => n + toJPY(e), 0)}));
+  const viewList = catView === 'all' ? list : list.filter(e => e.split === catView);
+  document.getElementById('catView').innerHTML = CAT_VIEWS.map(v => `<button type="button" class="filter" data-k="${esc(v.key)}" style="--c:${v.c}" aria-pressed="${catView === v.key}">${esc(v.label)}</button>`).join('');
+  const viewTotal = viewList.reduce((n,e) => n + toJPY(e), 0);
+  const viewName = {all:'全部', half:'共同（夾份）'}[catView] || `${catView} 自己`;
+  document.getElementById('catSum').textContent = `${viewName}：${fmtJPY(viewTotal)} ≈ ${fmtHKD(jpyToHKD(viewTotal))}`;
+  const byCat = CATS.map(c => ({...c, v: viewList.filter(e => e.cat === c.key).reduce((n,e) => n + toJPY(e), 0)}));
   const maxCat = Math.max(1, ...byCat.map(c => c.v));
   document.getElementById('catBars').innerHTML = byCat.map(c => `
     <div class="cat-row"><span class="ico" style="--c:${c.c}">${ICONS[c.icon]}</span>
